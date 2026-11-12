@@ -1,0 +1,55 @@
+package border
+
+import ai.image
+
+pub func remove(img &: image.Image):
+    w := img.width
+    h := img.height
+    if w < 2:
+        ret
+    end
+    mut border := 0
+    mut x := w - 1
+    until x >= 0:
+        mut sumA := 0
+        mut maxR := 0
+        mut maxG := 0
+        mut maxB := 0
+        repeat h in y:
+            c := image.GetPixel(img, x, y)
+            sumA += (c.a as int)
+            if (c.r as int) > maxR:
+                maxR = c.r as int
+            end
+            if (c.g as int) > maxG:
+                maxG = c.g as int
+            end
+            if (c.b as int) > maxB:
+                maxB = c.b as int
+            end
+        end
+        avgA := sumA / h
+        isFringe := avgA < 200
+        isDark := maxR < 40 and maxG < 40 and maxB < 40
+        if (not isFringe) and (not isDark):
+            break
+        end
+        border++
+        x--
+    end
+    if border <= 0:
+        ret
+    end
+    if border >= w:
+        border = w - 1
+    end
+    srcX := w - 1 - border
+    repeat border in i:
+        xx := w - border + i
+        repeat h in y:
+            mut c := image.GetPixel(img, srcX, y)
+            c.a = 255 as u8
+            image.SetPixel(img, xx, y, c)
+        end
+    end
+end
