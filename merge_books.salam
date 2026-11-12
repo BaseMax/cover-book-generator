@@ -1,0 +1,115 @@
+package main
+
+import ai.image
+import os
+import fs.dir
+import fs.path
+import str
+
+include border "border.salam"
+
+func findFrontBack(files: Vector<str>): (str, str):
+    mut front := ""
+    mut back := ""
+    each f in files:
+        if str.StartsWith(f, "2 -") and (str.EndsWith(f, ".png") or str.EndsWith(f, ".jpg") or str.EndsWith(f, ".jpeg")):
+            back = f
+        else:
+            if str.EndsWith(f, ".png") or str.EndsWith(f, ".jpg") or str.EndsWith(f, ".jpeg"):
+                front = f
+            end
+        end
+    end
+    ret front, back
+end
+
+func mergeImages(front_img &: image.Image, back_img &: image.Image): image.Image:
+    border.remove(front_img)
+    border.remove(back_img)
+    w := front_img.width + back_img.width
+    mut h := front_img.height
+    if back_img.height > h:
+        h = back_img.height
+    end
+    mut merged := image.New(w, h)
+    image.FillHex(merged, "#ffffff")
+    image.Overlay(merged, front_img, 0, 0, 1.0)
+    image.Overlay(merged, back_img, front_img.width, 0, 1.0)
+    ret merged
+end
+
+func saveMerged(merged: image.Image, out_path: str): bool:
+    opts := image.JPEGOptions { quality = 100, subsample = false, density_unit = 1, x_density = 205, y_density = 215 }
+    ret image.SaveJPEGOptions(merged, out_path, opts)
+end
+
+func processBook(book_dir: str, d: str, output_dir: str): bool:
+    files := dir.ListFiles(book_dir)
+    front, back := findFrontBack(files)
+    files.free()
+    if front == "" or back == "":
+        println "skip (missing front/back): ", d
+        ret false
+    end
+    mut ok1 := false
+    mut front_img := image.Open(path.Join(book_dir, front), ok1)
+    if not ok1:
+        println "failed to open front: ", front
+        ret false
+    end
+    mut ok2 := false
+    mut back_img := image.Open(path.Join(book_dir, back), ok2)
+    if not ok2:
+        println "failed to open back: ", back
+        image.Free(front_img)
+        ret false
+    end
+    mut merged := mergeImages(front_img, back_img)
+    out_path := path.Join(output_dir, d.concat(".jpg"))
+    saved := saveMerged(merged, out_path)
+    if not saved:
+        println "failed to save: ", out_path
+    else:
+        println "saved: ", out_path, " (", merged.width, "x", merged.height, ")"
+    end
+    image.Free(merged)
+    image.Free(front_img)
+    image.Free(back_img)
+    ret saved
+end
+
+func parseArgs(args: Vector<str>): (str, str):
+    mut input_dir := ""
+    if args.len() >= 2:
+        input_dir = args.get(1)
+    else:
+        input_dir = os.Cwd()
+    end
+    mut output_dir := ""
+    if args.len() >= 3:
+        output_dir = args.get(2)
+    else:
+        output_dir = path.Join(input_dir, "merged")
+    end
+    ret input_dir, output_dir
+end
+
+func main:
+    args := os.Args()
+    defer args.free()
+    input_dir, output_dir := parseArgs(args)
+    os.MkdirAll(output_dir)
+    dirs := dir.ListDirs(input_dir)
+    defer dirs.free()
+    mut count := 0
+    each d in dirs:
+        if d == "merged":
+            continue
+        end
+        book_dir := path.Join(input_dir, d)
+        if processBook(book_dir, d, output_dir):
+            count++
+        end
+    end
+    println "done: ", count, " books merged"
+end
